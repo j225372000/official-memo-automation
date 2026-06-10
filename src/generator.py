@@ -1,24 +1,45 @@
 import os
-import time  # 🚀 導入時間套件
+import time
 from google.colab import drive
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
 def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
     """
-    呼叫 Gemini API，將原始會議紀錄精煉為標準公文簽呈文字
+    呼叫 Gemini API，並內建 503 錯誤自動重試防線與降級備用機制
     """
     full_prompt = f"{prompt_instruction}\n\n請針對【{section_name}】這個章節，將以下原始資料提煉轉譯：\n{raw_data}"
     
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=full_prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2
-        )
-    )
-    return response.text
+    # 建立備用模型清單：優先使用 flash，若超載則降級使用穩定的 pro
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.5-pro']
+    
+    for model_name in models_to_try:
+        # 針對 503 伺服器超載，最多嘗試 3 次
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=full_prompt,
+                    config=types.GenerateContentConfig(temperature=0.2)
+                )
+                return response.text
+            except APIError as e:
+                # 偵測到 503 伺服器超載
+                if e.code == 503 and attempt < 2:
+                    wait_time = (attempt + 1) * 5
+                    print(f"⚠️ Google 伺服器忙碌中 (503)，{wait_time} 秒後進行第 {attempt + 2} 次自動重試...")
+                    time.sleep(wait_time)
+                else:
+                    # 如果嘗試 3 次都失敗，且還有備用模型，則切換模型
+                    if model_name != models_to_try[-1]:
+                        print(f"🚨 {model_name} 持續超載，切換為備用高級模型 {models_to_try[-1]}...")
+                        time.sleep(2)
+                        break
+                    else:
+                        raise e  # 最終防線：若都失敗則拋出異常
 
+# ==================== 這線以下就是您要找的 main() 主程序 ====================
 def main():
     drive_folder = "/content/drive/MyDrive/會議紀錄自動化"
     input_file_path = os.path.join(drive_folder, "正式會議紀錄_成品.md")
@@ -45,18 +66,14 @@ def main():
     
     print("\n🤖 Gemini AI 正在發動雲端智慧引擎，進行高階公文語境轉譯...")
     
-    # 🚀 防線優化：拆開呼叫，並在章節之間加入 time.sleep() 降頻，防止觸發 429 限制
     print("⏳ 正在轉譯：第一章節...")
     sec1 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "國內金融市場分析與研判")
-    time.sleep(4)  # 強制冷卻 4 秒
     
     print("⏳ 正在轉譯：第二章節...")
     sec2 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "金管會放寬投信基金限制之影響及券商公會建議")
-    time.sleep(4)  # 強制冷卻 4 秒
     
     print("⏳ 正在轉譯：第三章節...")
     sec3 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "元大證券營運概況與風險控管")
-    time.sleep(4)  # 強制冷卻 4 秒
     
     print("⏳ 正在轉譯：第四章節...")
     sec4 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "重要 Q&A 補充（長官核心關切事項）")
