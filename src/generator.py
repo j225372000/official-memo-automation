@@ -1,5 +1,4 @@
 import os
-from google.colab import drive
 from openai import OpenAI
 
 def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
@@ -16,10 +15,7 @@ def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
     return response.choices[0].message.content
 
 def main():
-    print("📂 正在連動您的 Google Drive...")
-    drive.mount('/content/drive')
-    
-    # 嚴格對齊您的 Google Drive 雲端硬碟資料夾名稱
+    # 修正：不再由內部執行 mount，改為直接存取已被 Colab 掛載好的路徑
     drive_folder = "/content/drive/MyDrive/會議紀錄自動化"
     input_file_path = os.path.join(drive_folder, "正式會議紀錄_成品.md")
     
@@ -37,12 +33,12 @@ def main():
     with open(input_file_path, "r", encoding="utf-8") as f:
         raw_meeting_data = f.read()
         
-    # 初始化客戶端（由 Colab 環境變數注入 API Key）
+    # 初始化客戶端
     client = OpenAI(api_key=os.environ.get("AI_API_KEY"))
     
     print("\n🤖 AI 正在發動雲端智慧引擎，進行高階公文語境轉譯...")
     
-    # 修正核心：字典內的所有 Keys 必須與 Markdown 模板中的大括號 100% 完全一致
+    # 嚴格對齊 Markdown 模板中的大括號變數
     refined_sections = {
         "meeting_date": "115 年 5 月 27 日",
         "institution_name": "元大證券",
@@ -52,10 +48,10 @@ def main():
         "AI_executive_qa": call_ai_for_section(client, prompt_instruction, raw_meeting_data, "重要 Q&A 補充（長官核心關切事項）")
     }
     
-    # 執行文本填充（此時變數已完全對齊，絕不會再噴出 KeyError）
+    # 執行文本填充
     final_output = template_content.format(**refined_sections)
     
-    # 產出至 Google Drive 目的地
+    # 產出至 Google Drive
     output_file_path = os.path.join(drive_folder, "自動產出公文_簽呈.md")
     with open(output_file_path, "w", encoding="utf-8") as f:
         f.write(final_output)
