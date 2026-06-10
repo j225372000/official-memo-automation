@@ -1,21 +1,26 @@
 import os
-from openai import OpenAI
+from google.colab import drive
+from google import genai
+from google.genai import types
 
 def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
     """
-    呼叫 AI API，將原始會議紀錄精煉為標準公文簽呈文字
+    呼叫 Gemini API，將原始會議紀錄精煉為標準公文簽呈文字
     """
     full_prompt = f"{prompt_instruction}\n\n請針對【{section_name}】這個章節，將以下原始資料提煉轉譯：\n{raw_data}"
     
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.2
+    # 採用 Google GenAI 2026 官方最新標準語法
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=full_prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.2  # 低隨機性，確保金融語境嚴謹
+        )
     )
-    return response.choices[0].message.content
+    return response.text
 
 def main():
-    # 修正：不再由內部執行 mount，改為直接存取已被 Colab 掛載好的路徑
+    # 存取已被 Colab 掛載好的雲端硬碟路徑
     drive_folder = "/content/drive/MyDrive/會議紀錄自動化"
     input_file_path = os.path.join(drive_folder, "正式會議紀錄_成品.md")
     
@@ -33,10 +38,15 @@ def main():
     with open(input_file_path, "r", encoding="utf-8") as f:
         raw_meeting_data = f.read()
         
-    # 初始化客戶端
-    client = OpenAI(api_key=os.environ.get("AI_API_KEY"))
+    # 初始化 Gemini 客戶端（會自動讀取系統環境變數中的 GEMINI_API_KEY）
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("\n❌ 錯誤：找不到 GEMINI_API_KEY 環境變數，請確認 Colab 設定。")
+        return
+        
+    client = genai.Client(api_key=api_key)
     
-    print("\n🤖 AI 正在發動雲端智慧引擎，進行高階公文語境轉譯...")
+    print("\n🤖 Gemini AI 正在發動雲端智慧引擎，進行高階公文語境轉譯...")
     
     # 嚴格對齊 Markdown 模板中的大括號變數
     refined_sections = {
