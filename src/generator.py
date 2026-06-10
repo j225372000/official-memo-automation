@@ -3,33 +3,55 @@ import time
 from google.colab import drive
 from google import genai
 from google.genai import types
-from google.genai.errors import APIError
+
+def split_text_by_length(text, max_chars=4000):
+    """
+    將超大會議紀錄依照字數安全切割，防止單次請求過大觸發 429
+    """
+    lines = text.split('\n')
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for line in lines:
+        if current_length + len(line) > max_chars:
+            chunks.append('\n'.join(current_chunk))
+            current_chunk = [line]
+            current_length = len(line)
+        else:
+            current_chunk.append(line)
+            current_length += len(line)
+            
+    if current_chunk:
+        chunks.append('\n'.join(current_chunk))
+    return chunks
 
 def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
     """
-    呼叫 Gemini API，內建 429 自動切換備用模型通道防線
+    分段提煉公文核心內容，徹底繞過免費套餐限流
     """
-    full_prompt = f"{prompt_instruction}\n\n請針對【{section_name}】這個章節，將以下原始資料提煉轉譯：\n{raw_data}"
+    # 1. 自動切割文本
+    data_chunks = split_text_by_length(raw_data, max_chars=4000)
+    sub_results = []
     
-    # 建立階層式模型防線
-    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
+    print(f"📦 【{section_name}】數據過大，程式自動優化為分分段處理（共 {len(data_chunks)} 節）...")
     
-    for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=full_prompt,
-                config=types.GenerateContentConfig(temperature=0.2)
-            )
-            return response.text
-        except APIError as e:
-            # 如果是免費套餐觸發 429 限流，且還有備用通道
-            if e.code == 429 and model_name != models_to_try[-1]:
-                print(f"⚠️ {model_name} 觸發免費套餐頻率牆 (429)，自動切換至穩定備用通道 {models_to_try[-1]}...")
-                time.sleep(5)  # 緩衝冷卻
-                continue
-            else:
-                raise e
+    for i, chunk in enumerate(data_chunks):
+        full_prompt = f"{prompt_instruction}\n\n請針對【{section_name}】這個章節，將以下【第 {i+1} 部分原始會議紀錄】提煉轉譯為標準公文文字：\n{chunk}"
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=full_prompt,
+            config=types.GenerateContentConfig(temperature=0.2)
+        )
+        sub_results.append(response.text)
+        
+        # 免費套餐硬性緩衝，每段之間休眠 8 秒
+        if len(data_chunks) > 1 and i < len(data_chunks) - 1:
+            time.sleep(8)
+            
+    # 2. 自動合併分段產出
+    return "\n".join(sub_results)
 
 def main():
     drive_folder = "/content/drive/MyDrive/會議紀錄自動化"
@@ -59,18 +81,15 @@ def main():
     
     print("⏳ 正在轉譯：第一章節...")
     sec1 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "國內金融市場分析與研判")
-    print("💤 安全緩衝排隊中...")
-    time.sleep(10)
+    time.sleep(12)
     
     print("⏳ 正在轉譯：第二章節...")
     sec2 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "金管會放寬投信基金限制之影響及券商公會建議")
-    print("💤 安全緩衝排隊中...")
-    time.sleep(10)
+    time.sleep(12)
     
     print("⏳ 正在轉譯：第三章節...")
     sec3 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "元大證券營運概況與風險控管")
-    print("💤 安全緩衝排隊中...")
-    time.sleep(10)
+    time.sleep(12)
     
     print("⏳ 正在轉譯：第四章節...")
     sec4 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "重要 Q&A 補充（長官核心關切事項）")
