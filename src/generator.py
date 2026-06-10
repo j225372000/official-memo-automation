@@ -7,39 +7,42 @@ from google.genai.errors import APIError
 
 def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
     """
-    呼叫 Gemini API，並內建 503 錯誤自動重試防線與降級備用機制
+    呼叫 Gemini API，內建 429(限流) 與 503(超載) 的智慧型退避自動重試機制
     """
     full_prompt = f"{prompt_instruction}\n\n請針對【{section_name}】這個章節，將以下原始資料提煉轉譯：\n{raw_data}"
     
-    # 建立備用模型清單：優先使用 flash，若超載則降級使用穩定的 pro
+    # 優先使用 flash，若多次失敗則降級使用穩定的 pro
     models_to_try = ['gemini-2.5-flash', 'gemini-2.5-pro']
     
     for model_name in models_to_try:
-        # 針對 503 伺服器超載，最多嘗試 3 次
-        for attempt in range(3):
+        # 針對每次請求最多嘗試 4 次
+        for attempt in range(4):
             try:
                 response = client.models.generate_content(
                     model=model_name,
                     contents=full_prompt,
                     config=types.GenerateContentConfig(temperature=0.2)
                 )
+                # 執行成功後，強制休眠 2 秒，為主程序留出安全緩衝
+                time.sleep(2)
                 return response.text
+                
             except APIError as e:
-                # 偵測到 503 伺服器超載
-                if e.code == 503 and attempt < 2:
-                    wait_time = (attempt + 1) * 5
-                    print(f"⚠️ Google 伺服器忙碌中 (503)，{wait_time} 秒後進行第 {attempt + 2} 次自動重試...")
+                # 偵測到 429 (配額/限流) 或 503 (伺服器超載)
+                if e.code in [429, 503] and attempt < 3:
+                    # 指數退避策略：第一次等 8 秒，第二次等 16 秒，第三次等 24 秒
+                    wait_time = (attempt + 1) * 8
+                    print(f"⚠️ 觸發伺服器限制 ({e.code})，系統啟動安全防線，強制冷卻 {wait_time} 秒後重試...")
                     time.sleep(wait_time)
                 else:
-                    # 如果嘗試 3 次都失敗，且還有備用模型，則切換模型
+                    # 如果該模型嘗試 4 次都卡死，且還有備用模型，則切換模型
                     if model_name != models_to_try[-1]:
-                        print(f"🚨 {model_name} 持續超載，切換為備用高級模型 {models_to_try[-1]}...")
-                        time.sleep(2)
+                        print(f"🚨 {model_name} 配額耗盡或持續超載，自動切換至備用高級模型 {models_to_try[-1]}...")
+                        time.sleep(3)
                         break
                     else:
-                        raise e  # 最終防線：若都失敗則拋出異常
+                        raise e  # 最終防線：全數失敗則報錯
 
-# ==================== 這線以下就是您要找的 main() 主程序 ====================
 def main():
     drive_folder = "/content/drive/MyDrive/會議紀錄自動化"
     input_file_path = os.path.join(drive_folder, "正式會議紀錄_成品.md")
