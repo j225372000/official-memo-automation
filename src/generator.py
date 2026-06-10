@@ -43,21 +43,21 @@ def main():
     
     print("\n🤖 Gemini AI 正在發動雲端智慧引擎，進行高階公文語境轉譯...")
     
-    # 🎯 物理防線：每一章節強制間隔 15 秒，規避 Google 針對免費版 API 的流量監控
+    # 🎯 免費套餐終極防線：每一章節強制間隔 65 秒，硬性突破每分鐘 RPM 限制
     print("⏳ 正在轉譯：第一章節...")
     sec1 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "國內金融市場分析與研判")
-    print("💤 防止 429 限制，系統強制冷卻 15 秒...")
-    time.sleep(15)
+    print("💤 免費套餐限制嚴格，系統強制安全休眠 65 秒，請耐心稍候...")
+    time.sleep(65)
     
     print("⏳ 正在轉譯：第二章節...")
     sec2 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "金管會放寬投信基金限制之影響及券商公會建議")
-    print("💤 防止 429 限制，系統強制冷卻 15 秒...")
-    time.sleep(15)
+    print("💤 免費套餐限制嚴格，系統強制安全休眠 65 秒，請耐心稍候...")
+    time.sleep(65)
     
     print("⏳ 正在轉譯：第三章節...")
     sec3 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "元大證券營運概況與風險控管")
-    print("💤 防止 429 限制，系統強制冷卻 15 秒...")
-    time.sleep(15)
+    print("💤 免費套餐限制嚴格，系統強制安全休眠 65 秒，請耐心稍候...")
+    time.sleep(65)
     
     print("⏳ 正在轉譯：第四章節...")
     sec4 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "重要 Q&A 補充（長官核心關切事項）")
