@@ -3,19 +3,33 @@ import time
 from google.colab import drive
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
 def call_ai_for_section(client, prompt_instruction, raw_data, section_name):
     """
-    呼叫 Gemini API，提煉標準公文文字
+    呼叫 Gemini API，內建 429 自動切換備用模型通道防線
     """
     full_prompt = f"{prompt_instruction}\n\n請針對【{section_name}】這個章節，將以下原始資料提煉轉譯：\n{raw_data}"
     
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=full_prompt,
-        config=types.GenerateContentConfig(temperature=0.2)
-    )
-    return response.text
+    # 建立階層式模型防線
+    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
+    
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(temperature=0.2)
+            )
+            return response.text
+        except APIError as e:
+            # 如果是免費套餐觸發 429 限流，且還有備用通道
+            if e.code == 429 and model_name != models_to_try[-1]:
+                print(f"⚠️ {model_name} 觸發免費套餐頻率牆 (429)，自動切換至穩定備用通道 {models_to_try[-1]}...")
+                time.sleep(5)  # 緩衝冷卻
+                continue
+            else:
+                raise e
 
 def main():
     drive_folder = "/content/drive/MyDrive/會議紀錄自動化"
@@ -43,21 +57,20 @@ def main():
     
     print("\n🤖 Gemini AI 正在發動雲端智慧引擎，進行高階公文語境轉譯...")
     
-    # 🎯 免費套餐終極防線：每一章節強制間隔 65 秒，硬性突破每分鐘 RPM 限制
     print("⏳ 正在轉譯：第一章節...")
     sec1 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "國內金融市場分析與研判")
-    print("💤 免費套餐限制嚴格，系統強制安全休眠 65 秒，請耐心稍候...")
-    time.sleep(65)
+    print("💤 安全緩衝排隊中...")
+    time.sleep(10)
     
     print("⏳ 正在轉譯：第二章節...")
     sec2 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "金管會放寬投信基金限制之影響及券商公會建議")
-    print("💤 免費套餐限制嚴格，系統強制安全休眠 65 秒，請耐心稍候...")
-    time.sleep(65)
+    print("💤 安全緩衝排隊中...")
+    time.sleep(10)
     
     print("⏳ 正在轉譯：第三章節...")
     sec3 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "元大證券營運概況與風險控管")
-    print("💤 免費套餐限制嚴格，系統強制安全休眠 65 秒，請耐心稍候...")
-    time.sleep(65)
+    print("💤 安全緩衝排隊中...")
+    time.sleep(10)
     
     print("⏳ 正在轉譯：第四章節...")
     sec4 = call_ai_for_section(client, prompt_instruction, raw_meeting_data, "重要 Q&A 補充（長官核心關切事項）")
